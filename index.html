@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>特許出願クレーム起案テンプレート</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 min-h-screen">
+<div class="max-w-4xl mx-auto p-4">
+  <h1 class="text-2xl font-bold text-blue-900 mb-1">特許出願クレーム起案テンプレート</h1>
+  <p class="text-gray-500 text-sm mb-6">独立クレームと従属クレームを段階的に起案し、Markdownで出力します。</p>
+
+  <!-- 基本情報 -->
+  <div class="bg-white rounded-xl shadow p-4 mb-5">
+    <h2 class="font-semibold text-gray-700 mb-3">発明の基本情報</h2>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div>
+        <label for="inv-title" class="text-xs text-gray-500 block mb-1">発明の名称</label>
+        <input id="inv-title" type="text" placeholder="例: 高効率熱交換装置" aria-label="発明の名称"
+          class="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+      </div>
+      <div>
+        <label for="inv-field" class="text-xs text-gray-500 block mb-1">技術分野</label>
+        <input id="inv-field" type="text" placeholder="例: 熱工学、化学機器" aria-label="技術分野"
+          class="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+      </div>
+      <div class="md:col-span-2">
+        <label for="inv-problem" class="text-xs text-gray-500 block mb-1">解決しようとする課題</label>
+        <textarea id="inv-problem" rows="2" placeholder="発明が解決する技術的課題を記載" aria-label="解決課題"
+          class="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"></textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- 独立クレーム -->
+  <div class="bg-white rounded-xl shadow p-4 mb-5">
+    <h2 class="font-semibold text-gray-700 mb-3">独立クレーム（請求項1）</h2>
+    <div class="mb-3">
+      <label for="preamble" class="text-xs text-gray-500 block mb-1">前置部（Preamble）— 発明のカテゴリと上位概念</label>
+      <input id="preamble" type="text" placeholder="例: 熱交換器であって、" aria-label="前置部"
+        class="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+    </div>
+    <div class="mb-3">
+      <label class="text-xs text-gray-500 block mb-1">特徴部（Characterizing part）— 構成要素</label>
+      <div id="elements-list" class="space-y-2 mb-2"></div>
+      <button onclick="addElement()" class="text-blue-600 text-sm hover:underline">＋ 構成要素を追加</button>
+    </div>
+  </div>
+
+  <!-- 従属クレーム -->
+  <div class="bg-white rounded-xl shadow p-4 mb-5">
+    <h2 class="font-semibold text-gray-700 mb-3">従属クレーム</h2>
+    <div id="dep-claims-list" class="space-y-3 mb-3"></div>
+    <button onclick="addDepClaim()" class="text-blue-600 text-sm hover:underline">＋ 従属クレームを追加</button>
+  </div>
+
+  <!-- チェックリスト -->
+  <div class="bg-white rounded-xl shadow p-4 mb-5">
+    <h2 class="font-semibold text-gray-700 mb-3">クレーム構成チェックリスト</h2>
+    <div id="checklist" class="space-y-2 text-sm"></div>
+  </div>
+
+  <!-- アクション -->
+  <div class="flex gap-3 flex-wrap mb-6">
+    <button onclick="exportMarkdown()" class="bg-blue-700 text-white px-5 py-2 rounded-lg text-sm hover:bg-blue-800">Markdownエクスポート</button>
+    <button onclick="clearAll()" class="bg-red-100 text-red-700 px-5 py-2 rounded-lg text-sm hover:bg-red-200">リセット</button>
+  </div>
+
+  <div id="md-output" class="hidden bg-gray-900 text-green-300 rounded-xl p-4 text-xs font-mono whitespace-pre-wrap overflow-x-auto"></div>
+</div>
+
+<script>
+const CHECKLIST_ITEMS = [
+  '発明の名称が記入されている',
+  '独立クレームの前置部が記入されている',
+  '独立クレームの構成要素が1つ以上ある',
+  '各構成要素が明確に区別されている',
+  '従属クレームは独立クレームまたは他の従属クレームを引用している',
+  '各請求項番号が連続している',
+  '請求項の末尾が「。」で終わっている',
+];
+
+let state = { title: '', field: '', problem: '', preamble: '', elements: [], depClaims: [] };
+
+function loadState() {
+  try { const s = localStorage.getItem('patent-claims'); if (s) state = JSON.parse(s); } catch(e) {}
+}
+
+function saveState() {
+  localStorage.setItem('patent-claims', JSON.stringify(state));
+  renderChecklist();
+}
+
+function bindBasicInputs() {
+  ['inv-title','inv-field','inv-problem','preamble'].forEach(id => {
+    const el = document.getElementById(id);
+    el.addEventListener('input', () => {
+      if (id === 'inv-title') state.title = el.value;
+      else if (id === 'inv-field') state.field = el.value;
+      else if (id === 'inv-problem') state.problem = el.value;
+      else if (id === 'preamble') state.preamble = el.value;
+      saveState();
+    });
+    if (id === 'inv-title') el.value = state.title;
+    else if (id === 'inv-field') el.value = state.field;
+    else if (id === 'inv-problem') el.value = state.problem;
+    else if (id === 'preamble') el.value = state.preamble;
+  });
+}
+
+function addElement() {
+  state.elements.push({ id: Date.now(), text: '' });
+  saveState();
+  renderElements();
+}
+
+function removeElement(id) {
+  state.elements = state.elements.filter(e => e.id !== id);
+  saveState();
+  renderElements();
+}
+
+function renderElements() {
+  const c = document.getElementById('elements-list');
+  c.innerHTML = '';
+  state.elements.forEach((el, i) => {
+    const row = document.createElement('div');
+    row.className = 'flex gap-2 items-start';
+    const num = document.createElement('span');
+    num.className = 'text-xs text-gray-400 mt-2 w-5 text-right';
+    num.textContent = (i + 1) + '.';
+    const inp = document.createElement('input');
+    inp.type = 'text';
+    inp.value = el.text;
+    inp.placeholder = '例: 第1熱交換部材と、';
+    inp.className = 'flex-1 border rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300';
+    inp.setAttribute('aria-label', '構成要素 ' + (i + 1));
+    inp.addEventListener('input', () => { el.text = inp.value; saveState(); });
+    const del = document.createElement('button');
+    del.className = 'text-red-400 hover:text-red-600 text-xs mt-2';
+    del.textContent = '×';
+    del.setAttribute('aria-label', '構成要素 ' + (i + 1) + 'を削除');
+    del.onclick = () => removeElement(el.id);
+    row.appendChild(num); row.appendChild(inp); row.appendChild(del);
+    c.appendChild(row);
+  });
+}
+
+function addDepClaim() {
+  const n = state.depClaims.length + 2;
+  state.depClaims.push({ id: Date.now(), refNum: 1, limitation: '' });
+  saveState();
+  renderDepClaims();
+}
+
+function removeDepClaim(id) {
+  state.depClaims = state.depClaims.filter(d => d.id !== id);
+  saveState();
+  renderDepClaims();
+}
+
+function renderDepClaims() {
+  const c = document.getElementById('dep-claims-list');
+  c.innerHTML = '';
+  if (state.depClaims.length === 0) {
+    const p = document.createElement('p');
+    p.className = 'text-gray-400 text-sm';
+    p.textContent = '従属クレームなし（追加ボタンで追加）';
+    c.appendChild(p);
+    return;
+  }
+  state.depClaims.forEach((dc, i) => {
+    const claimNum = i + 2;
+    const card = document.createElement('div');
+    card.className = 'border rounded-lg p-3 bg-blue-50';
+    const header = document.createElement('div');
+    header.className = 'flex items-center justify-between mb-2';
+    const title = document.createElement('span');
+    title.className = 'font-semibold text-blue-800 text-sm';
+    title.textContent = '請求項 ' + claimNum;
+    const del = document.createElement('button');
+    del.className = 'text-red-400 hover:text-red-600 text-xs';
+    del.textContent = '削除';
+    del.setAttribute('aria-label', '請求項 ' + claimNum + 'を削除');
+    del.onclick = () => removeDepClaim(dc.id);
+    header.appendChild(title); header.appendChild(del);
+
+    const refRow = document.createElement('div');
+    refRow.className = 'flex gap-2 items-center mb-2 text-sm';
+    const refLbl = document.createElement('label');
+    refLbl.textContent = '引用請求項:';
+    refLbl.className = 'text-gray-600 text-xs';
+    refLbl.htmlFor = 'ref-' + dc.id;
+    const maxRef = claimNum - 1;
+    const refInp = document.createElement('input');
+    refInp.type = 'number';
+    refInp.id = 'ref-' + dc.id;
+    refInp.min = '1'; refInp.max = String(maxRef);
+    refInp.value = dc.refNum;
+    refInp.className = 'border rounded w-16 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300';
+    refInp.setAttribute('aria-label', '引用請求項番号');
+    refInp.addEventListener('input', () => { dc.refNum = parseInt(refInp.value) || 1; saveState(); });
+    refRow.appendChild(refLbl); refRow.appendChild(refInp);
+
+    const limLbl = document.createElement('label');
+    limLbl.textContent = '限定事項（付加される構成・特徴）';
+    limLbl.className = 'text-xs text-gray-500 block mb-1';
+    limLbl.htmlFor = 'lim-' + dc.id;
+    const limInp = document.createElement('textarea');
+    limInp.id = 'lim-' + dc.id;
+    limInp.rows = 2;
+    limInp.value = dc.limitation;
+    limInp.placeholder = '例: 前記第1熱交換部材が銅製であることを特徴とする熱交換器。';
+    limInp.className = 'w-full border rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300';
+    limInp.setAttribute('aria-label', '請求項 ' + claimNum + ' 限定事項');
+    limInp.addEventListener('input', () => { dc.limitation = limInp.value; saveState(); });
+
+    card.appendChild(header); card.appendChild(refRow); card.appendChild(limLbl); card.appendChild(limInp);
+    c.appendChild(card);
+  });
+}
+
+function renderChecklist() {
+  const c = document.getElementById('checklist');
+  c.innerHTML = '';
+  const checks = [
+    state.title.length > 0,
+    state.preamble.length > 0,
+    state.elements.length > 0,
+    state.elements.every(e => e.text.trim().length > 0),
+    state.depClaims.every(d => d.limitation.trim().length > 0),
+    true,
+    true,
+  ];
+  CHECKLIST_ITEMS.forEach((item, i) => {
+    const row = document.createElement('div');
+    row.className = 'flex items-center gap-2';
+    const icon = document.createElement('span');
+    icon.className = checks[i] ? 'text-green-500 font-bold' : 'text-gray-300 font-bold';
+    icon.textContent = checks[i] ? '✓' : '○';
+    const lbl = document.createElement('span');
+    lbl.className = checks[i] ? 'text-gray-700' : 'text-gray-400';
+    lbl.textContent = item;
+    row.appendChild(icon); row.appendChild(lbl);
+    c.appendChild(row);
+  });
+}
+
+function exportMarkdown() {
+  let md = `# 特許出願クレーム起案\n\n`;
+  md += `**発明の名称**: ${state.title || '（未入力）'}\n`;
+  md += `**技術分野**: ${state.field || '（未入力）'}\n\n`;
+  if (state.problem) md += `## 解決課題\n\n${state.problem}\n\n`;
+  md += `## 請求の範囲\n\n`;
+  md += `【請求項1】\n${state.preamble || '（前置部未入力）'}\n`;
+  if (state.elements.length > 0) {
+    state.elements.forEach(e => { md += `${e.text || '（構成要素未入力）'}\n`; });
+  }
+  md += '\n';
+  state.depClaims.forEach((dc, i) => {
+    const claimNum = i + 2;
+    md += `【請求項${claimNum}】\n請求項${dc.refNum}に記載の発明において、${dc.limitation || '（限定事項未入力）'}\n\n`;
+  });
+  const el = document.getElementById('md-output');
+  el.textContent = md;
+  el.classList.remove('hidden');
+  navigator.clipboard && navigator.clipboard.writeText(md);
+}
+
+function clearAll() {
+  if (!confirm('全データをリセットしますか？')) return;
+  state = { title: '', field: '', problem: '', preamble: '', elements: [], depClaims: [] };
+  saveState();
+  ['inv-title','inv-field','inv-problem','preamble'].forEach(id => { document.getElementById(id).value = ''; });
+  renderElements(); renderDepClaims(); renderChecklist();
+  document.getElementById('md-output').classList.add('hidden');
+}
+
+loadState();
+bindBasicInputs();
+renderElements();
+renderDepClaims();
+renderChecklist();
+</script>
+</body>
+</html>
